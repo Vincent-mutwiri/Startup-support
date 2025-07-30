@@ -127,6 +127,46 @@ router.get('/startups/progress', async (req, res) => {
     }
 });
 
+// GET /api/startups/by-name/:name - Get a single startup with all its nested data and progress
+router.get('/startups/by-name/:name', async (req, res) => {
+    try {
+        const startupName = decodeURIComponent(req.params.name);
+
+        const startup = await Startup.findOne({ name: startupName }).populate({
+            path: 'projects',
+            populate: {
+                path: 'milestones',
+                populate: {
+                    path: 'deliverables'
+                }
+            }
+        });
+
+        if (!startup) {
+            return res.status(404).json({ message: 'Startup not found' });
+        }
+
+        // Reuse our progress calculation logic
+        const projectsWithProgress = startup.projects.map(project => {
+            const progress = calculateProgress(project);
+            return {
+                ...project.toObject(),
+                progress,
+            };
+        });
+
+        const responseData = {
+            ...startup.toObject(),
+            projects: projectsWithProgress,
+        };
+
+        res.json(responseData);
+
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 
 
 // --- MEETING ROUTES ---
