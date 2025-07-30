@@ -9,6 +9,109 @@ const Deliverable = require('../models/deliverable');
 const Meeting = require('../models/meeting');
 const Resource = require('../models/resource');
 
+// --- NEW ADVANCED ANALYTICS ROUTES ---
+
+// Helper function to calculate milestone progress
+const getMilestoneStats = (milestones) => {
+    let totalMilestones = milestones.length;
+    let completedMilestones = 0;
+    let totalDeliverables = 0;
+    let completedDeliverables = 0;
+
+    milestones.forEach(milestone => {
+        let isMilestoneComplete = true;
+        if (!milestone.deliverables || milestone.deliverables.length === 0) {
+            isMilestoneComplete = false; // A milestone with no deliverables isn't complete
+        } else {
+            milestone.deliverables.forEach(d => {
+                totalDeliverables++;
+                if (d.status === 'Completed') {
+                    completedDeliverables++;
+                } else {
+                    isMilestoneComplete = false; // If any deliverable is not complete, the milestone isn't
+                }
+            });
+        }
+        if (isMilestoneComplete) {
+            completedMilestones++;
+        }
+    });
+
+    return { totalMilestones, completedMilestones, totalDeliverables, completedDeliverables };
+};
+
+// GET /api/analytics/main-hub - Gathers aggregated data for the main dashboard
+router.get('/analytics/main-hub', async (req, res) => {
+    try {
+        const meetings = await Meeting.find();
+        const startups = await Startup.find().populate({
+            path: 'projects',
+            populate: { path: 'milestones', populate: { path: 'deliverables' } }
+        });
+
+        // 1. Calculate stats per department from meetings
+        const statsByDept = {};
+        meetings.forEach(meeting => {
+            const dept = meeting.departmentName;
+            if (!statsByDept[dept]) {
+                statsByDept[dept] = { meetingCount: 0, engagedStartups: new Set() };
+            }
+            statsByDept[dept].meetingCount++;
+            statsByDept[dept].engagedStartups.add(meeting.startupName);
+        });
+
+        // Convert Set to count
+        Object.keys(statsByDept).forEach(dept => {
+            statsByDept[dept].engagedStartups = statsByDept[dept].engagedStartups.size;
+        });
+
+        // 2. Calculate progress per startup
+        const startupProgress = startups.map(startup => {
+            let allMilestones = [];
+            startup.projects.forEach(p => {
+                allMilestones.push(...p.milestones);
+            });
+            const progress = getMilestoneStats(allMilestones);
+            return {
+                name: startup.name,
+                ...progress
+            };
+        });
+
+        res.json({ departmentEngagement: statsByDept, startupProgress: startupProgress });
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching main hub analytics', error: err.message });
+    }
+});
+
+// GET /api/analytics/department/:name - Gathers startup-specific progress for one department
+router.get('/analytics/department/:name', async (req, res) => {
+    try {
+        const departmentName = decodeURIComponent(req.params.name);
+        
+        // Find which startups this department has engaged with
+        const meetings = await Meeting.find({ departmentName: departmentName }).select('startupName');
+        const engagedStartupNames = [...new Set(meetings.map(m => m.startupName))];
+
+        // Get data only for those startups
+        const startups = await Startup.find({ name: { $in: engagedStartupNames } }).populate({
+            path: 'projects',
+            populate: { path: 'milestones', populate: { path: 'deliverables' } }
+        });
+
+        const startupProgress = startups.map(startup => {
+            let allMilestones = [];
+            startup.projects.forEach(p => allMilestones.push(...p.milestones));
+            const progress = getMilestoneStats(allMilestones);
+            return { name: startup.name, ...progress };
+        });
+
+        res.json({ startupProgress: startupProgress });
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching department analytics', error: err.message });
+    }
+});
+
 // --- DASHBOARD STATS ROUTE ---
 
 // GET /api/dashboard-stats - Fetch high-level statistics for the dashboard
