@@ -457,4 +457,71 @@ router.post('/milestones/:milestoneId/deliverables', async (req, res) => {
 // The PATCH route for updating a deliverable is already in place from our previous work.
 // It's at PATCH /api/deliverables/:id and is essential for the interactive checkboxes.
 
+// --- NEW MANAGEMENT & DASHBOARD ROUTES ---
+
+// POST /api/startups - Create a new startup
+router.post('/startups', async (req, res) => {
+    const startup = new Startup({
+        name: req.body.name,
+        description: req.body.description,
+    });
+    try {
+        const newStartup = await startup.save();
+        res.status(201).json(newStartup);
+    } catch (err) {
+        // Handle potential duplicate name error
+        if (err.code === 11000) {
+            return res.status(409).json({ message: 'A startup with this name already exists.' });
+        }
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// POST /api/startups/:startupId/projects - Add a new project to a specific startup
+router.post('/startups/:startupId/projects', async (req, res) => {
+    try {
+        const startup = await Startup.findById(req.params.startupId);
+        if (!startup) return res.status(404).json({ message: 'Startup not found' });
+
+        const newProject = new Project({
+            name: req.body.name,
+            description: req.body.description,
+        });
+        await newProject.save();
+
+        startup.projects.push(newProject._id);
+        await startup.save();
+
+        res.status(201).json(newProject);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// POST /api/resources - Create a new resource
+router.post('/resources', async (req, res) => {
+    const resource = new Resource({
+        name: req.body.name,
+        description: req.body.description,
+        url: req.body.url,
+        department: req.body.department,
+    });
+    try {
+        const newResource = await resource.save();
+        res.status(201).json(newResource);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// GET /api/meetings/recent - Get the 10 most recent meetings for the dashboard
+router.get('/meetings/recent', async (req, res) => {
+    try {
+        const recentMeetings = await Meeting.find().sort({ meetingDate: -1 }).limit(10);
+        res.json(recentMeetings);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;
