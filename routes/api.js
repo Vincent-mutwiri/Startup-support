@@ -89,11 +89,22 @@ router.get('/analytics/department/:name', async (req, res) => {
     try {
         const departmentName = decodeURIComponent(req.params.name);
         
-        // Find which startups this department has engaged with
+        // Find startups this department has engaged with via meetings OR projects
         const meetings = await Meeting.find({ departmentName: departmentName }).select('startupName');
-        const engagedStartupNames = [...new Set(meetings.map(m => m.startupName))];
+        const projects = await Project.find({ department: departmentName });
 
-        // Get data only for those startups
+        // Get the startups associated with these projects
+        const startupsWithProjects = await Startup.find({ projects: { $in: projects.map(p => p._id) } }).select('name');
+
+        // Combine all unique startup names
+        const engagedStartupNames = [
+            ...new Set([
+                ...meetings.map(m => m.startupName),
+                ...startupsWithProjects.map(s => s.name)
+            ])
+        ];
+
+        // Get full data only for those startups
         const startups = await Startup.find({ name: { $in: engagedStartupNames } }).populate({
             path: 'projects',
             populate: { path: 'milestones', populate: { path: 'deliverables' } }
