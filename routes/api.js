@@ -393,5 +393,68 @@ router.post('/startups', async (req, res) => {
     }
 });
 
+// --- MANAGEMENT & INTERACTIVE ROUTES ---
+
+// GET /api/management/form-data - Get all startups, projects, and milestones (names and IDs only) for populating forms
+router.get('/management/form-data', async (req, res) => {
+    try {
+        const startups = await Startup.find().select('_id name').populate({
+            path: 'projects',
+            select: '_id name',
+            populate: {
+                path: 'milestones',
+                select: '_id name'
+            }
+        });
+        res.json(startups);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching data for management form', error: err.message });
+    }
+});
+
+// POST /api/projects/:projectId/milestones - Add a new milestone to a specific project
+router.post('/projects/:projectId/milestones', async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        const newMilestone = new Milestone({
+            name: req.body.name,
+            dueDate: req.body.dueDate,
+        });
+        await newMilestone.save();
+
+        project.milestones.push(newMilestone._id);
+        await project.save();
+
+        res.status(201).json(newMilestone);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// POST /api/milestones/:milestoneId/deliverables - Add a new deliverable to a specific milestone
+router.post('/milestones/:milestoneId/deliverables', async (req, res) => {
+    try {
+        const milestone = await Milestone.findById(req.params.milestoneId);
+        if (!milestone) return res.status(404).json({ message: 'Milestone not found' });
+
+        const newDeliverable = new Deliverable({
+            name: req.body.name,
+            status: 'Not Started', // Deliverables always start as 'Not Started'
+        });
+        await newDeliverable.save();
+
+        milestone.deliverables.push(newDeliverable._id);
+        await milestone.save();
+
+        res.status(201).json(newDeliverable);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// The PATCH route for updating a deliverable is already in place from our previous work.
+// It's at PATCH /api/deliverables/:id and is essential for the interactive checkboxes.
 
 module.exports = router;
