@@ -123,6 +123,58 @@ router.get('/analytics/department/:name', async (req, res) => {
     }
 });
 
+// --- NEW: STARTUP DETAIL FILTERED BY DEPARTMENT ---
+
+// GET /api/analytics/startup/:startupName/department/:departmentName
+router.get('/analytics/startup/:startupName/department/:departmentName', async (req, res) => {
+    try {
+        const { startupName, departmentName } = req.params;
+
+        const startup = await Startup.findOne({ name: decodeURIComponent(startupName) }).populate({
+            path: 'projects',
+            // This 'match' option is the magic. It only populates projects
+            // where the department field matches the one from the URL.
+            match: { department: decodeURIComponent(departmentName) },
+            populate: {
+                path: 'milestones',
+                populate: {
+                    path: 'deliverables'
+                }
+            }
+        });
+
+        if (!startup) {
+            return res.status(404).json({ message: 'Startup not found' });
+        }
+
+        // The 'startup' object will now contain ONLY the projects that matched the department.
+        // We can now run our progress calculation on this filtered data.
+        const projectsWithProgress = startup.projects.map(project => {
+            // Using the existing getMilestoneStats helper function
+            const { totalDeliverables, completedDeliverables } = getMilestoneStats(project.milestones || []);
+            const percentage = totalDeliverables > 0 ? Math.round((completedDeliverables / totalDeliverables) * 100) : 0;
+            return {
+                ...project.toObject(),
+                progress: {
+                    total: totalDeliverables,
+                    completed: completedDeliverables,
+                    percentage: percentage
+                }
+            };
+        });
+
+        const responseData = {
+            ...startup.toObject(),
+            projects: projectsWithProgress,
+        };
+
+        res.json(responseData);
+
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching filtered startup data', error: err.message });
+    }
+});
+
 // --- DASHBOARD STATS ROUTE ---
 
 // GET /api/dashboard-stats - Fetch high-level statistics for the dashboard
