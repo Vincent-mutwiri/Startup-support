@@ -9,6 +9,35 @@ const Deliverable = require('../models/deliverable');
 const Meeting = require('../models/meeting');
 const Resource = require('../models/resource');
 
+// --- DASHBOARD STATS ROUTE ---
+
+// GET /api/dashboard-stats - Fetch high-level statistics for the dashboard
+router.get('/dashboard-stats', async (req, res) => {
+    try {
+        // Use Promise.all to run database queries in parallel for efficiency
+        const [
+            meetingCount,
+            completedDeliverablesCount,
+            // We will add completed milestones here later
+        ] = await Promise.all([
+            Meeting.countDocuments(),
+            Deliverable.countDocuments({ status: 'Completed' }),
+        ]);
+
+        // Note: Calculating "completed milestones" is more complex.
+        // A milestone is complete if ALL its deliverables are complete.
+        // For now, we'll focus on deliverables, which is a direct and powerful metric.
+
+        res.json({
+            totalMeetings: meetingCount,
+            totalCompletedDeliverables: completedDeliverablesCount,
+        });
+
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching dashboard stats', error: err.message });
+    }
+});
+
 // --- HELPER FUNCTION FOR PROGRESS CALCULATION ---
 const calculateProgress = (project) => {
     if (!project.milestones || project.milestones.length === 0) {
@@ -69,67 +98,7 @@ router.get('/startups/progress', async (req, res) => {
     }
 });
 
-// POST to update progress for a startup's project
-router.post('/startups/progress', async (req, res) => {
-    try {
-        const { startupId, projectId, milestoneId, deliverableId, status } = req.body;
-        
-        // Validate required fields
-        if (!startupId || !projectId || !milestoneId || !deliverableId || !status) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
 
-        // Find the startup
-        const startup = await Startup.findById(startupId);
-        if (!startup) {
-            return res.status(404).json({ message: 'Startup not found' });
-        }
-
-        // Find the project
-        const project = await Project.findById(projectId);
-        if (!project) {
-            return res.status(404).json({ message: 'Project not found' });
-        }
-
-        // Find and update the deliverable status
-        const milestone = await Milestone.findById(milestoneId);
-        if (!milestone) {
-            return res.status(404).json({ message: 'Milestone not found' });
-        }
-
-        const deliverableIndex = milestone.deliverables.findIndex(d => d._id.toString() === deliverableId);
-        if (deliverableIndex === -1) {
-            return res.status(404).json({ message: 'Deliverable not found' });
-        }
-
-        // Update the deliverable status
-        milestone.deliverables[deliverableIndex].status = status;
-        milestone.markModified('deliverables');
-        await milestone.save();
-
-        // Return the updated project with progress
-        const updatedProject = await Project.findById(projectId)
-            .populate({
-                path: 'milestones',
-                populate: {
-                    path: 'deliverables'
-                }
-            });
-
-        const progress = calculateProgress(updatedProject);
-        
-        res.json({
-            message: 'Progress updated successfully',
-            project: {
-                ...updatedProject.toObject(),
-                progress
-            }
-        });
-
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-});
 
 // --- MEETING ROUTES ---
 
@@ -245,6 +214,32 @@ router.post('/milestones', async (req, res) => {
 });
 
 // --- DELIVERABLE ROUTES ---
+
+// PATCH /api/deliverables/:id - Update a deliverable's status or other fields
+router.patch('/deliverables/:id', async (req, res) => {
+    try {
+        const deliverable = await Deliverable.findById(req.params.id);
+        if (!deliverable) {
+            return res.status(404).json({ message: 'Cannot find deliverable' });
+        }
+
+        if (req.body.status != null) {
+            deliverable.status = req.body.status;
+        }
+        if (req.body.name != null) {
+            deliverable.name = req.body.name;
+        }
+        if (req.body.notes != null) {
+            deliverable.notes = req.body.notes;
+        }
+
+        const updatedDeliverable = await deliverable.save();
+        res.json(updatedDeliverable);
+
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
 
 // POST a new deliverable
 router.post('/deliverables', async (req, res) => {
