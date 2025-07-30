@@ -4,6 +4,8 @@ const Schema = mongoose.Schema;
 const projectSchema = new Schema({
     name: { type: String, required: true },
     description: String,
+    // --- THIS IS THE KEY CHANGE ---
+    department: { type: String, required: true }, 
     milestones: [{ type: Schema.Types.ObjectId, ref: 'Milestone' }],
 }, { timestamps: true });
 
