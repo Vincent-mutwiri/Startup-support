@@ -524,4 +524,31 @@ router.get('/meetings/recent', async (req, res) => {
     }
 });
 
+// --- NEW DEPARTMENT-SPECIFIC & FORM-POPULATION ROUTES ---
+
+// GET /api/departments/:name/stats - Get statistics specifically for one department
+router.get('/departments/:name/stats', async (req, res) => {
+    try {
+        const departmentName = decodeURIComponent(req.params.name);
+        const meetingCount = await Meeting.countDocuments({ departmentName: departmentName });
+        
+        // In the future, you could add more stats here, like resources created by this dept.
+        res.json({
+            meetingsLogged: meetingCount,
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching department stats', error: err.message });
+    }
+});
+
+// GET /api/startups/names - Get a simple list of all startup names and IDs for forms
+router.get('/startups/names', async (req, res) => {
+    try {
+        const startups = await Startup.find().select('_id name').sort({ name: 1 });
+        res.json(startups);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching startup names', error: err.message });
+    }
+});
+
 module.exports = router;
