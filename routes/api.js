@@ -589,6 +589,7 @@ router.post('/startups/:startupId/projects', async (req, res) => {
         const newProject = new Project({
             name: req.body.name,
             description: req.body.description,
+            department: req.body.department, // Added department field
         });
         await newProject.save();
 
