@@ -38,6 +38,35 @@ router.get('/dashboard-stats', async (req, res) => {
     }
 });
 
+// --- DEPARTMENT DETAIL ROUTE ---
+
+// GET /api/departments/:name - Fetches all data associated with a specific department
+router.get('/departments/:name', async (req, res) => {
+    // The department name comes from the URL parameter
+    const departmentName = req.params.name;
+
+    if (!departmentName) {
+        return res.status(400).json({ message: 'Department name is required.' });
+    }
+
+    try {
+        // Run queries in parallel to get meetings and resources for this department
+        const [meetings, resources] = await Promise.all([
+            Meeting.find({ departmentName: departmentName }).sort({ meetingDate: -1 }),
+            Resource.find({ department: departmentName }).sort({ name: 1 })
+        ]);
+
+        res.json({
+            departmentName: departmentName,
+            meetings: meetings,
+            resources: resources
+        });
+
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching department data', error: err.message });
+    }
+});
+
 // --- HELPER FUNCTION FOR PROGRESS CALCULATION ---
 const calculateProgress = (project) => {
     if (!project.milestones || project.milestones.length === 0) {
